@@ -6,10 +6,15 @@ type RouterOSAPIError struct {
 	Message string
 	ID      string
 	Detail  map[string]string
+	Cause   error
 }
 
 func (e *RouterOSAPIError) Error() string {
-	return fmt.Sprintf("RouterOSAPIError: %s", e.Message)
+	msg := fmt.Sprintf("RouterOSAPIError: %s", e.Message)
+	if e.Cause != nil {
+		msg += fmt.Sprintf(" (cause: %s)", e.Cause.Error())
+	}
+	return msg
 }
 
 type TimeoutError struct {
@@ -42,4 +47,12 @@ type ProtocolError struct {
 
 func (e *ProtocolError) Error() string {
 	return fmt.Sprintf("RouterOSAPIProtocolError: %s", e.Message)
+}
+
+type RetryError struct {
+	RouterOSAPIError
+}
+
+func (e *RetryError) Error() string {
+	return fmt.Sprintf("RouterOSAPIRetryError: %s", e.Message)
 }

@@ -1,6 +1,7 @@
 package mikrotik
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -12,9 +13,10 @@ type QuerySafeResult struct {
 }
 
 type Client struct {
-	pool   *Pool
-	mu     sync.Mutex
-	closed bool
+	pool        *Pool
+	mu          sync.Mutex
+	closed      bool
+	autoConnect bool
 }
 
 func NewClient(config Config) (*Client, error) {
@@ -37,7 +39,14 @@ func NewClient(config Config) (*Client, error) {
 	pool := NewPool(config)
 
 	client := &Client{
-		pool: pool,
+		pool:        pool,
+		autoConnect: config.AutoConnect,
+	}
+
+	if client.autoConnect {
+		go func() {
+			_ = pool.Init()
+		}()
 	}
 
 	return client, nil
@@ -55,6 +64,10 @@ func (c *Client) Connect() error {
 }
 
 func (c *Client) Query(cmd []string) ([]QueryResult, error) {
+	return c.QueryContext(context.Background(), cmd)
+}
+
+func (c *Client) QueryContext(ctx context.Context, cmd []string) ([]QueryResult, error) {
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -62,36 +75,24 @@ func (c *Client) Query(cmd []string) ([]QueryResult, error) {
 	}
 	c.mu.Unlock()
 
-	result, err := c.pool.Execute(cmd)
+	if c.autoConnect {
+		_ = c.pool.Init()
+	}
+
+	result, err := c.pool.ExecuteContext(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}
 
-	if result == nil {
-		return nil, nil
-	}
-
-	if r, ok := result.([]QueryResult); ok {
-		return r, nil
-	}
-
-	if r, ok := result.([]interface{}); ok {
-		qr := make([]QueryResult, len(r))
-		for i, v := range r {
-			if m, ok := v.(map[string]string); ok {
-				qr[i] = QueryResult(m)
-			} else if m, ok := v.(QueryResult); ok {
-				qr[i] = m
-			}
-		}
-		return qr, nil
-	}
-
-	return nil, nil
+	return convertQueryResult(result), nil
 }
 
 func (c *Client) QuerySafe(cmd []string) QuerySafeResult {
-	data, err := c.Query(cmd)
+	return c.QuerySafeContext(context.Background(), cmd)
+}
+
+func (c *Client) QuerySafeContext(ctx context.Context, cmd []string) QuerySafeResult {
+	data, err := c.QueryContext(ctx, cmd)
 	if err != nil {
 		apiErr, ok := err.(*RouterOSAPIError)
 		if !ok {
@@ -100,6 +101,25 @@ func (c *Client) QuerySafe(cmd []string) QuerySafeResult {
 		return QuerySafeResult{IsError: true, Error: apiErr}
 	}
 	return QuerySafeResult{Data: data}
+}
+
+func (c *Client) QueryStream(ctx context.Context, cmd []string, onRow func(QueryResult)) ([]QueryResult, error) {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, &ConnectionError{RouterOSAPIError{Message: "client is closed"}}
+	}
+	c.mu.Unlock()
+
+	if c.autoConnect {
+		_ = c.pool.Init()
+	}
+
+	return c.pool.ExecuteStream(ctx, cmd, onRow)
+}
+
+func (c *Client) Stats() PoolStats {
+	return c.pool.GetStats()
 }
 
 func (c *Client) On(event string, cb func(interface{})) {
@@ -112,4 +132,28 @@ func (c *Client) Close() {
 
 	c.closed = true
 	c.pool.Close()
+}
+
+func convertQueryResult(result interface{}) []QueryResult {
+	if result == nil {
+		return nil
+	}
+
+	if r, ok := result.([]QueryResult); ok {
+		return r
+	}
+
+	if r, ok := result.([]interface{}); ok {
+		qr := make([]QueryResult, len(r))
+		for i, v := range r {
+			if m, ok := v.(map[string]string); ok {
+				qr[i] = QueryResult(m)
+			} else if m, ok := v.(QueryResult); ok {
+				qr[i] = m
+			}
+		}
+		return qr
+	}
+
+	return nil
 }
