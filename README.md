@@ -40,20 +40,19 @@ import (
 
 func main() {
     client, err := routeros.NewClient(routeros.Config{
-        Host:     "192.168.88.1",
-        Port:     8728,
-        Username: "admin",
-        Password: "your-password",
-        PoolSize: 3,
+        Host:         "192.168.88.1",
+        Port:         8729,
+        Username:     "admin",
+        Password:     "your-password",
+        SSL:          true,
+        PoolSize:     3,
+        AutoConnect:  true,
     })
     if err != nil {
         log.Fatal(err)
     }
 
-    if err := client.Connect(); err != nil {
-        log.Fatal(err)
-    }
-
+    // autoConnect: true — no explicit Connect() needed
     result, err := client.Query([]string{"/ip/address/print"})
     if err != nil {
         log.Fatal(err)
