@@ -87,11 +87,45 @@ func main() {
 
 ```go
 type SSLOptions struct {
-    Cert       string // Custom client certificate
-    Key        string // Client certificate key
-    CA         string // Custom CA certificate
+    Cert       string // Custom client certificate (PEM)
+    Key        string // Client certificate key (PEM)
+    CA         string // Custom CA certificate (PEM)
     SkipVerify bool   // Skip TLS verification (default: true)
 }
+```
+
+```go
+// Custom CA cert (self-signed RouterOS cert)
+client, _ := routeros.NewClient(routeros.Config{
+    Host:     "192.168.88.1",
+    Port:     8729,
+    Username: "admin",
+    Password: "password",
+    SSL: routeros.SSLOptions{
+        CA:         "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+        SkipVerify: false,
+    },
+})
+
+// Client certificate authentication
+client2, _ := routeros.NewClient(routeros.Config{
+    Host:     "192.168.88.1",
+    Port:     8729,
+    Username: "admin",
+    Password: "password",
+    SSL: routeros.SSLOptions{
+        Cert: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+        Key:  "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+        CA:   "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+    },
+})
+
+// Skip verification (self-signed, default behavior)
+client3, _ := routeros.NewClient(routeros.Config{
+    Host: "192.168.88.1",
+    Port: 8729,
+    SSL:  true, // shortcut — same as SSLOptions{SkipVerify: true}
+})
 ```
 
 ### RetryConfig
