@@ -39,6 +39,7 @@ type Config struct {
 	PoolSize     int
 	AutoConnect  bool
 	IdleTimeout  time.Duration
+	AutoFormat   bool
 	Retry        *RetryConfig
 	HealthCheck  *HealthCheckConfig
 }
@@ -173,6 +174,7 @@ func (p *Pool) newConnection(cfg Config) *Connection {
 		tlsCfg,
 		cfg.Username, cfg.Password,
 		cfg.Timeout, cfg.QueryTimeout, cfg.IdleTimeout,
+		cfg.AutoFormat,
 	)
 }
 

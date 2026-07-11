@@ -5,7 +5,7 @@ import "fmt"
 type RouterOSAPIError struct {
 	Message string
 	ID      string
-	Detail  map[string]string
+	Detail  map[string]interface{}
 	Cause   error
 }
 

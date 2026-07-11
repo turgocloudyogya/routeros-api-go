@@ -80,6 +80,7 @@ func main() {
 | `PoolSize`     | `int`               | `3`              | Number of connections in the pool        |
 | `AutoConnect`  | `bool`              | `true`           | Auto-connect on first query              |
 | `IdleTimeout`  | `time.Duration`     | `0`              | Close socket after idle (0 = disabled)   |
+| `AutoFormat`   | `bool`              | `false`          | Auto-convert "123"→123, "true"→true, etc.|
 | `Retry`        | `*RetryConfig`      | `nil`            | Retry with exponential backoff           |
 | `HealthCheck`  | `*HealthCheckConfig`| `nil`            | Periodic health check config             |
 
@@ -147,6 +148,17 @@ type HealthCheckConfig struct {
     Command  []string      // Custom command (default: ["/system/identity/print"])
 }
 ```
+
+### Auto-Format
+
+When `AutoFormat: true`, string values in query results are automatically converted to their appropriate types:
+- `"true"` / `"false"` → `bool` `true` / `false`
+- `"123"`, `"0"`, `"-42"` → `int64`
+- `"3.14"`, `"0.5"` → `float64`
+- IP addresses, CIDRs, MAC addresses remain strings
+- Everything else remains a string
+
+`QueryResult` is `map[string]interface{}` — use type assertions or `fmt.Sprintf("%v", ...)` to access values.
 
 ## API
 

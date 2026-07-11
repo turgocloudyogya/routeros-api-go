@@ -84,7 +84,7 @@ func (c *Client) QueryContext(ctx context.Context, cmd []string) ([]QueryResult,
 		return nil, err
 	}
 
-	return convertQueryResult(result), nil
+	return toQueryResult(result), nil
 }
 
 func (c *Client) QuerySafe(cmd []string) QuerySafeResult {
@@ -134,7 +134,7 @@ func (c *Client) Close() {
 	c.pool.Close()
 }
 
-func convertQueryResult(result interface{}) []QueryResult {
+func toQueryResult(result interface{}) []QueryResult {
 	if result == nil {
 		return nil
 	}
@@ -146,7 +146,7 @@ func convertQueryResult(result interface{}) []QueryResult {
 	if r, ok := result.([]interface{}); ok {
 		qr := make([]QueryResult, len(r))
 		for i, v := range r {
-			if m, ok := v.(map[string]string); ok {
+			if m, ok := v.(map[string]interface{}); ok {
 				qr[i] = QueryResult(m)
 			} else if m, ok := v.(QueryResult); ok {
 				qr[i] = m

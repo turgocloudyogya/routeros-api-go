@@ -40,6 +40,7 @@ type Connection struct {
 	timeout       time.Duration
 	queryTimeout  time.Duration
 	idleTimeout   time.Duration
+	autoFormat    bool
 	lastActivity  time.Time
 	connected     bool
 	authenticated bool
@@ -54,7 +55,7 @@ type Connection struct {
 	failedQueries int64
 }
 
-func NewConnection(host string, port int, tlsConfig *tls.Config, username, password string, timeout, queryTimeout, idleTimeout time.Duration) *Connection {
+func NewConnection(host string, port int, tlsConfig *tls.Config, username, password string, timeout, queryTimeout, idleTimeout time.Duration, autoFormat bool) *Connection {
 	c := &Connection{
 		host:         host,
 		port:         port,
@@ -64,6 +65,7 @@ func NewConnection(host string, port int, tlsConfig *tls.Config, username, passw
 		timeout:      timeout,
 		queryTimeout: queryTimeout,
 		idleTimeout:  idleTimeout,
+		autoFormat:   autoFormat,
 		lastActivity: time.Now(),
 		listeners:    make(map[string][]func(interface{})),
 	}
@@ -215,20 +217,22 @@ func (c *Connection) readLoop() {
 		c.mu.Unlock()
 
 		parsed := parseResponse(words)
+		formatted := formatRows(parsed, c.autoFormat)
 
 		if t != nil {
 			c.emit("receive", map[string]interface{}{
 				"id":   t.id,
-				"data": parsed,
+				"data": formatted,
 			})
 
-			if len(parsed) > 0 {
-				if msg, ok := parsed[0]["message"]; ok && msg != "" {
+			if len(formatted) > 0 {
+				if msg, ok := formatted[0]["message"]; ok && msg != "" {
 					var err error
+					msgStr := fmt.Sprintf("%v", msg)
 					if t.cmd[0] == "/login" {
-						err = &AuthenticationError{RouterOSAPIError{Message: msg, ID: t.id, Detail: parsed[0]}}
+						err = &AuthenticationError{RouterOSAPIError{Message: msgStr, ID: t.id, Detail: formatted[0]}}
 					} else {
-						err = &ProtocolError{RouterOSAPIError{Message: msg, ID: t.id, Detail: parsed[0]}}
+						err = &ProtocolError{RouterOSAPIError{Message: msgStr, ID: t.id, Detail: formatted[0]}}
 					}
 					if c.streamState != nil {
 						c.mu.Lock()
@@ -247,7 +251,7 @@ func (c *Connection) readLoop() {
 				c.streamState.done <- struct{}{}
 				c.mu.Unlock()
 			}
-			t.result <- &taskResult{data: parsed}
+			t.result <- &taskResult{data: formatted}
 			close(t.result)
 		}
 
@@ -275,7 +279,8 @@ func (c *Connection) emitStreamRows(words []string) {
 		}
 		if s[0] == "!re" {
 			parsed := parseResponse(s)
-			for _, row := range parsed {
+			formatted := formatRows(parsed, c.autoFormat)
+			for _, row := range formatted {
 				c.streamState.rows = append(c.streamState.rows, row)
 				if c.streamState.onRow != nil {
 					c.streamState.onRow(row)

@@ -13,7 +13,7 @@ Types available:
 - `*routeros.Client` — high-level client
 - `routeros.Config` — configuration struct
 - `routeros.SSLOptions`, `routeros.RetryConfig`, `routeros.HealthCheckConfig` — nested configs
-- `routeros.QueryResult` — `map[string]string` per `!re` row
+- `routeros.QueryResult` — `map[string]interface{}` per `!re` row (values are strings by default, or auto-formatted numbers/bools)
 - `routeros.QuerySafeResult` — `{IsError bool, Data []QueryResult, Error *RouterOSAPIError}`
 - `routeros.PoolStats` — statistics struct
 - Error types: `*RouterOSAPIError`, `*TimeoutError`, `*AuthenticationError`, `*ConnectionError`, `*ProtocolError`, `*RetryError`
@@ -36,6 +36,7 @@ client, err := routeros.NewClient(routeros.Config{
     PoolSize:     3,                     // default: 3
     AutoConnect:  true,                  // connect async on NewClient
     IdleTimeout:  0,                     // close socket after idle, 0 = disabled
+    AutoFormat:   false,                 // auto-convert "123"→123, "true"→true, etc.
     Retry: &routeros.RetryConfig{        // retry on failure, nil = no retry
         Retries:  3,
         MinDelay: 1 * time.Second,
@@ -67,13 +68,37 @@ if err != nil {
 defer client.Close()
 ```
 
+## Auto-Format (`AutoFormat: true`)
+
+When enabled, numeric strings and booleans are auto-converted in query results:
+
+```go
+client, _ := routeros.NewClient(routeros.Config{AutoFormat: true})
+
+r, _ := client.Query([]string{"/interface/print"})
+// Without AutoFormat: r[0]["running"] → "true" (string)
+// With AutoFormat:    r[0]["running"] → true (bool)
+//                     r[0]["mtu"] → 1500  (int64)
+```
+
+`QueryResult` values become `interface{}` — use type assertions or `fmt.Sprintf("%v", ...)`:
+
+```go
+r, _ := client.Query([]string{"/interface/print"})
+name, _ := r[0]["name"].(string)        // always string
+running, _ := r[0]["running"].(bool)    // only with AutoFormat
+mtu, _ := r[0]["mtu"].(int64)           // only with AutoFormat
+```
+
+Auto-formatting skips IP addresses, CIDRs, and MAC addresses to preserve their string form.
+
 ## Core API Methods
 
 ### `client.Query(cmd)` / `client.QueryContext(ctx, cmd)` — returns error
 
 ```go
 ifaces, err := client.Query([]string{"/interface/print"})
-// ifaces is []routeros.QueryResult (map[string]string)
+// ifaces is []routeros.QueryResult (map[string]interface{})
 // Example: ifaces[0]["name"] → "ether1"
 
 // With context for cancellation/timeout
@@ -302,6 +327,7 @@ type Config struct {
     PoolSize     int
     AutoConnect  bool
     IdleTimeout  time.Duration
+    AutoFormat   bool
     Retry        *RetryConfig
     HealthCheck  *HealthCheckConfig
 }

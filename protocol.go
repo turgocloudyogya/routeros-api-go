@@ -1,8 +1,57 @@
 package mikrotik
 
-import "strings"
+import (
+	"regexp"
+	"strconv"
+	"strings"
+)
 
-type QueryResult map[string]string
+type QueryResult map[string]interface{}
+
+var ipCIDR = regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{1,2})?$`)
+var macAddr = regexp.MustCompile(`^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$`)
+
+func autoFormatValue(s string) interface{} {
+	switch {
+	case s == "true":
+		return true
+	case s == "false":
+		return false
+	case ipCIDR.MatchString(s):
+		return s
+	case macAddr.MatchString(s):
+		return s
+	case strings.Contains(s, ":"):
+		return s
+	default:
+		if i, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return i
+		}
+		if f, err := strconv.ParseFloat(s, 64); err == nil {
+			return f
+		}
+		return s
+	}
+}
+
+func formatRows(rows []QueryResult, enabled bool) []QueryResult {
+	if !enabled {
+		return rows
+	}
+	out := make([]QueryResult, len(rows))
+	for i, row := range rows {
+		f := make(QueryResult, len(row))
+		for k, v := range row {
+			if s, ok := v.(string); ok {
+				f[k] = autoFormatValue(s)
+			} else {
+				f[k] = v
+			}
+		}
+		out[i] = f
+	}
+	return out
+}
 
 func buildCommand(words []string) []byte {
 	return encodeWords(words)
